@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ninja Shuriken Throw - Sage Naruto vs Madara</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron&display=swap');
+  body {
+    margin: 0;
+    background: radial-gradient(circle at top, #1a0e00, #0a0500 90%);
+    font-family: 'Orbitron', monospace;
+    color: #ffaa33;
+    overflow: hidden;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #score {
+    margin: 20px;
+    font-size: 2.3rem;
+    text-shadow:
+      0 0 8px #ffaa33,
+      0 0 15px #ffaa33,
+      0 0 20px #ff8800,
+      0 0 40px #ff6600;
+  }
+  canvas {
+    border-radius: 20px;
+    box-shadow:
+      0 0 20px #ffaa3399,
+      inset 0 0 45px #ff880033;
+    display: block;
+    margin: 0 auto;
+    background: transparent;
+  }
+  #startBtn {
+    margin-top: 15px;
+    padding: 15px 48px;
+    font-size: 1.6rem;
+    background: #ffaa33;
+    border: none;
+    border-radius: 36px;
+    cursor: pointer;
+    color: #2a1000;
+    font-weight: bold;
+    box-shadow:
+      0 0 20px #ffaa33cc,
+      0 0 30px #ff8800cc inset;
+    transition: background-color 0.3s ease;
+  }
+  #startBtn:hover {
+    background-color: #ff6600;
+  }
+</style>
+</head>
+<body>
+<div id="score">Score: 0</div>
+<canvas id="gameCanvas" width="850" height="460"></canvas>
+<button id="startBtn" disabled>Loading Images...</button>
+<script>
+// Setup
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const startBtn = document.getElementById('startBtn');
+let score = 0;
+let lives = 3;
+let gameStarted = false;
+let difficulty = 1;
+// Sounds
+const shootSound = new Audio('https://freesound.org/data/previews/341/341695_6261194-lq.mp3');
+const hitSound = new Audio('https://freesound.org/data/previews/174/174491_3242490-lq.mp3');
+
+// Background image setup
+const bgImage = new Image();
+bgImage.src = 'https://wallpaperaccess.com/full/630657.jpg';
+
+// Shuriken
+class Shuriken {
+  constructor(x,y,color){
+    this.x = x; this.y = y;
+    this.radius = 12;
+    this.speed = 9;
+    this.active = true;
+    this.angle = 0;
+    this.color = color;
+  }
+  update(){
+    this.x += this.speed;
+    this.angle += 0.3;
+    if(this.x > canvas.width + 20) this.active = false;
+  }
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = this.color;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 15;
+    for(let i=0;i<4;i++){
+      ctx.rotate(Math.PI/2);
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.lineTo(6,-12);
+      ctx.lineTo(-6,-12);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+// Hero and enemy images
+const narutoImage = new Image();
+narutoImage.src = 'https://orig00.deviantart.net/823a/f/2012/034/5/0/naruto_sennin_render_by_itachi1998-d4oj6eu.png';
+const madaraImage = new Image();
+madaraImage.src = 'https://www.pngmart.com/files/13/Anime-Madara-Uchiha-Transparent-Images-PNG.png';
+let imagesLoaded = 0;
+const totalImages = 2;
+narutoImage.onload = ()=>{ imagesLoaded++; checkAllLoaded(); };
+madaraImage.onload = ()=>{ imagesLoaded++; checkAllLoaded(); };
+function checkAllLoaded(){
+  if(imagesLoaded===totalImages){
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Game";
+  }
+}
+// Enemies
+class Enemy {
+  constructor(){
+    this.sprite = madaraImage;
+    this.x = canvas.width + 80;
+    this.y = Math.random()*(canvas.height-160)+80;
+    this.radius = 28;
+    this.speed = (3.5+Math.random()*2)*difficulty;
+    this.width = 60;
+    this.height = 80;
+    this.active = true;
+  }
+  update(){
+    this.x -= this.speed;
+    if(this.x+this.width<0) this.active = false;
+  }
+  draw(){ ctx.drawImage(this.sprite, this.x, this.y-this.height/2, this.width, this.height); }
+}
+// Fast clone enemy
+class FastEnemy extends Enemy {
+  constructor(){
+    super();
+    this.speed = (6+Math.random()*2)*difficulty;
+    this.width = 40;
+    this.height = 60;
+  }
+  draw(){
+    ctx.fillStyle="rgba(255,60,0,0.7)";
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius-10,0,2*Math.PI);
+    ctx.fill();
+  }
+}
+// Power-up
+class PowerUp {
+  constructor(){
+    this.x = canvas.width+40;
+    this.y = Math.random()*(canvas.height-100)+50;
+    this.radius = 15;
+    this.speed = 4;
+  }
+  update(){ this.x -= this.speed; }
+  draw(){
+    ctx.save();
+    ctx.shadowColor="gold"; ctx.shadowBlur=20;
+    ctx.fillStyle="yellow";
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius,0,2*Math.PI);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+// Hero
+const ninja = {
+  x:50,
+  y: canvas.height/2,
+  width:90,
+  height:120,
+  draw(){
+    if(imagesLoaded===totalImages){
+      ctx.drawImage(narutoImage,this.x,this.y-this.height/2,this.width,this.height);
+    }
+  }
+};
+// Game state
+let shurikens=[], enemies=[], powerUps=[];
+let keys={};
+let spawnEnemyInterval, powerUpInterval, difficultyInterval;
+let gameLoopId;
+// Functions
+function clearCanvas(){ ctx.clearRect(0,0,canvas.width,canvas.height); }
+function spawnEnemy(){
+  if(Math.random()<0.7) enemies.push(new Enemy());
+  else enemies.push(new FastEnemy());
+}
+function spawnPowerUp(){ powerUps.push(new PowerUp()); }
+function detectCollision(c1,c2){
+  let dx=c1.x-c2.x, dy=c1.y-c2.y;
+  return Math.sqrt(dx*dx+dy*dy) < c1.radius+c2.radius;
+}
+function drawLives(){
+  ctx.fillStyle="#ff3333";
+  ctx.font="20px Orbitron";
+  ctx.fillText("Lives: "+lives, canvas.width-120,30);
+}
+function gameLoop(){
+  if(!gameStarted) return;
+  clearCanvas();
+
+  // Draw wallpaper background
+  ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+
+  // Dark overlay to make background more dull and dark
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; // increased alpha from 0.5 to 0.75
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ninja.draw();
+  drawLives();
+
+  // Shurikens
+  shurikens.forEach((s,i)=>{
+    s.update();
+    if(!s.active) shurikens.splice(i,1);
+    else s.draw();
+  });
+
+  // Enemies
+  enemies.forEach((e,ei)=>{
+    e.update(); e.draw();
+    shurikens.forEach((sh,si)=>{
+      if(detectCollision(sh,e)){
+        hitSound.play();
+        enemies.splice(ei,1);
+        shurikens.splice(si,1);
+        score+=10;
+        scoreEl.textContent="Score: "+score;
+      }
+    });
+    if(e.x+e.width<0){
+      enemies.splice(ei,1);
+      lives--;
+      if(lives<=0) endGame();
+    }
+  });
+
+  // Power-ups
+  powerUps.forEach((p,pi)=>{
+    p.update(); p.draw();
+    if(detectCollision({x:ninja.x+ninja.width/2,y:ninja.y,radius:30},p)){
+      powerUps.splice(pi,1);
+      score+=50;
+      scoreEl.textContent="Score: "+score;
+    }
+  });
+
+  // Movement
+  if(keys['ArrowUp'] && ninja.y-ninja.height/2>0) ninja.y-=7;
+  if(keys['ArrowDown'] && ninja.y+ninja.height/2<canvas.height) ninja.y+=7;
+
+  gameLoopId=requestAnimationFrame(gameLoop);
+}
+function shootShuriken(){
+  shootSound.play();
+  const s=new Shuriken(ninja.x+ninja.width,ninja.y,'#ffaa33');
+  shurikens.push(s);
+}
+function startGame(){
+  if(gameStarted||imagesLoaded<totalImages) return;
+  gameStarted=true;
+  score=0; lives=3; difficulty=1;
+  enemies=[]; shurikens=[]; powerUps=[];
+  scoreEl.textContent="Score: 0";
+  startBtn.style.display='none';
+  ninja.y=canvas.height/2;
+  spawnEnemyInterval=setInterval(spawnEnemy,1400);
+  powerUpInterval=setInterval(spawnPowerUp,8000);
+  difficultyInterval=setInterval(()=>{ difficulty+=0.3; },20000);
+  gameLoop();
+}
+function endGame(){
+  gameStarted=false;
+  clearInterval(spawnEnemyInterval);
+  clearInterval(powerUpInterval);
+  clearInterval(difficultyInterval);
+  cancelAnimationFrame(gameLoopId);
+  alert("Game Over! Your Score: "+score);
+  startBtn.style.display='inline-block';
+}
+// Controls
+document.addEventListener('keydown', e=>{
+  keys[e.key]=true;
+  if(e.key===' '){
+    if(gameStarted) shootShuriken();
+    e.preventDefault();
+  }
+});
+document.addEventListener('keyup', e=>{ keys[e.key]=false; });
+startBtn.addEventListener('click', ()=>{ if(imagesLoaded===totalImages) startGame(); });
+</script>
+</body>
+</html>
